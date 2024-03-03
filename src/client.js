@@ -35,6 +35,8 @@ const makeClient = options => {
       query,
       variables,
       headers: headerOverrides,
+      operationName,
+      extensions,
     } = queryOptions;
 
     const headers = {
@@ -47,14 +49,16 @@ const makeClient = options => {
     }
 
     try {
-      const response = await fetch(
-        clientContext.endpoint,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({query, variables: (variables || {})}),
-        },
-      );
+      const response = await fetch(clientContext.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query,
+          variables: variables || {},
+          operationName,
+          extensions,
+        }),
+      });
       const responseObj = await response.json();
       if (hook) {
         hook(responseObj);

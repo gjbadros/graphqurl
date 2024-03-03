@@ -3,7 +3,15 @@ const {wsScheme} = require('./utils');
 const {parse} = require('graphql/language');
 
 const query = async function (options, successCb, errorCb) {
-  const {query, endpoint, headers, variables, name} = options;
+  const {
+    query,
+    extensions,
+    operationName,
+    endpoint,
+    headers,
+    variables,
+    name,
+  } = options;
   let client = makeClient({
     endpoint,
     headers,
@@ -91,11 +99,17 @@ const query = async function (options, successCb, errorCb) {
         },
       });
     } else {
-      await client.query({
-        query: query,
-        variables},
-      callbackWrapper(successCb),
-      callbackWrapper(errorCb),
+      const data = {
+        query: extensions ? undefined : query,
+        extensions,
+        operationName,
+        variables,
+      };
+      // console.debug("data = " + JSON.stringify(data));
+      await client.query(
+        data,
+        callbackWrapper(successCb),
+        callbackWrapper(errorCb)
       );
     }
   } catch (err) {

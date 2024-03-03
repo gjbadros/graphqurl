@@ -10,6 +10,8 @@ const {getIntrospectionQuery} = require('graphql/utilities');
 const {cli} = require('cli-ux');
 const {getOperationFromQueryFileContent} = require('./utils');
 const query = require('./query.js');
+const sha256 = require("js-sha256");
+
 
 // Convert fs.readFile into Promise version of same
 const readFile = util.promisify(fs.readFile);
@@ -19,7 +21,7 @@ class GraphqurlCommand extends Command {
     const {args, flags} = this.parse(GraphqurlCommand);
     const headers = this.parseHeaders(flags.header);
     const endpoint = this.getEndpoint(args);
-    let queryString = await this.getQueryString(args, flags);
+    let { queryString, hash, opName } = await this.getQueryString(args, flags);
     const variables = await this.getQueryVariables(args, flags);
 
     if (endpoint === null) {
@@ -63,15 +65,31 @@ class GraphqurlCommand extends Command {
       }
     }
 
+    let extensions;
+    let operationName;
+    if (flags.persistedQuery) {
+      extensions = {
+        persistedQuery: {
+          sha256Hash: hash,
+          version: 1,
+        },
+      };
+      operationName = opName;
+    }
+
     const queryOptions = {
       query: queryString,
+      extensions,
+      operationName,
       endpoint: endpoint,
       headers,
       variables,
       name: flags.name,
     };
 
-    cli.action.start('Executing query');
+    // console.debug("queryOptions = " + JSON.stringify(queryOptions, null, 2));
+
+    cli.action.start("Executing query");
     await query(queryOptions, successCallback, errorCallback);
   }
 
@@ -102,10 +120,21 @@ class GraphqurlCommand extends Command {
 
   async getQueryString(args, flags) {
     if (flags.queryFile) {
-      const fileContent = await readFile(flags.queryFile, 'utf8');
+      const fileContent = await readFile(flags.queryFile, "utf8");
       try {
         const operationString = getOperationFromQueryFileContent(fileContent, flags.operationName);
-        return operationString;
+        let opName = null;
+        const match = operationString.match(
+          /(query|mutation|subscription)\s+(\w+)/m
+        );
+        if (flags.operationName) {
+          opName = flags.operationName;
+        } else {
+          opName = match[2];
+        }
+        const hash = sha256(operationString);
+        // console.debug("opname = " + opName + ", hash = " + hash);
+        return { queryString: operationString, opName, hash };
       } catch (e) {
         this.error(e.message);
       }
@@ -247,6 +276,12 @@ GraphqurlCommand.flags = {
   operationName: flags.string({
     description: 'name of the operation to execute from the query file',
   }),
+
+  persistedQuery: flags.boolean({
+    char: "P",
+    description: "use persisted queries extension with the hash",
+  }),
+
 
   // file to read variables from
   variablesFile: flags.string({
